@@ -54,7 +54,7 @@ GOOS=linux GOARCH=amd64 go build -o artexscan .
 File `artex-rules.json` hiện tại **mới chỉ dựa trên chữ "ARTEX"** — em chưa truy cập được trang mẫu của anh (xem mục 8). Chạy chế độ profile để lấy dấu hiệu thật:
 
 ```bash
-./artexscan -profile http://47.129.49.162:8787/login
+./artexscan -profile http://47.120.40.162:8787/login
 ```
 
 Nó in ra:
