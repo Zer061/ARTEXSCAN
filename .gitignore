@@ -1,0 +1,10 @@
+# build artifacts
+artexscan
+*.exe
+
+# scan output
+ket-qua/
+*.log
+
+# OS
+.DS_Store

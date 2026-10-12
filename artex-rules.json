@@ -1,0 +1,64 @@
+{
+  "_note_1": "File dau hieu khoi tao. CAC RULE DUOI DAY MOI CHI DUA TREN TEN 'ARTEX' - chua doi chieu voi trang that.",
+  "_note_2": "Buoc bat buoc truoc khi quet dien rong: chay  ./artexscan -profile http://47.129.49.162:8787/login  roi thay the phan 'rules' bang ket qua no in ra.",
+  "_note_3": "Cac truong dung duoc: title | body | server | powered_by | location | status | cookie | cert_cn | cert_san | favicon_mmh3 | favicon_sha256 | url | header:<ten-header>",
+  "_note_4": "match: contains (mac dinh) | equals | prefix | regex. case_sensitive mac dinh false.",
+
+  "name": "ARTEX",
+  "paths": ["/", "/login"],
+  "min_score": 3,
+  "suspect_from": 2,
+
+  "rules": [
+    {
+      "id": "title-artex",
+      "field": "title",
+      "match": "contains",
+      "value": "ARTEX",
+      "score": 3,
+      "_why": "Ten san pham trong the <title> - dau hieu manh nhat neu dung."
+    },
+    {
+      "id": "body-artex",
+      "field": "body",
+      "match": "regex",
+      "value": "\\bartex\\b",
+      "score": 2,
+      "_why": "Ten san pham xuat hien trong HTML. Mot minh chi du xep 'nghi ngo'."
+    },
+    {
+      "id": "cert-artex",
+      "field": "cert_cn",
+      "match": "contains",
+      "value": "artex",
+      "score": 2,
+      "_why": "CN cua TLS cert tren 443/8787 neu deploy kem cert noi bo."
+    },
+    {
+      "id": "san-artex",
+      "field": "cert_san",
+      "match": "contains",
+      "value": "artex",
+      "score": 2,
+      "_why": "SAN cua TLS cert."
+    },
+
+    {
+      "id": "PLACEHOLDER-favicon",
+      "field": "favicon_mmh3",
+      "match": "equals",
+      "value": "0",
+      "score": 0,
+      "_why": "Thay '0' bang hash that tu -profile va dat score 4 - day la dau hieu chac chan nhat.",
+      "_safe": "De nguyen cung khong sao: host khong co favicon se co gia tri rong va rule rong luon bi bo qua, nen khong sinh false positive."
+    },
+    {
+      "id": "PLACEHOLDER-asset",
+      "field": "body",
+      "match": "contains",
+      "value": "DOI_THANH_TEN_FILE_JS_THAT",
+      "score": 0,
+      "_why": "Ten file JS/CSS co hash cua build ARTEX (vi du /assets/index-a1b2c3d4.js) - rat dac trung. Lay tu -profile."
+    }
+  ]
+}
