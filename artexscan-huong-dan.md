@@ -1,5 +1,5 @@
 ---
-VinSOC · Khối MIR · Asset Discovery
+VinSOC · MIR
 ---
 
 # artexscan
@@ -62,7 +62,7 @@ Chạy chế độ profile để tool tự lấy dấu hiệu từ trang ARTEX a
 
 ```bash
 go build -o artexscan .
-./artexscan -profile http://47.129.49.162:8787/login
+./artexscan -profile http://47.120.40.162:8787/login
 ```
 
 Nó in ra:
