@@ -4,7 +4,7 @@ VinSOC · MIR
 
 # artexscan
 
-Quét port 80/443/8787 theo danh sách IP, fingerprint HTTP/TLS và lọc ra các host đang chạy ARTEX. Kết quả chính là một file `artex.txt`, mỗi dòng một `IP:port`.
+Quét port 80/443/8787 theo danh sách IP, fingerprint HTTP/TLS và lọc ra các host đang chạy ARTEX. Kết quả chính là file do `-o` chỉ định (vd `output.txt`), mỗi dòng một `IP:port`.
 
 - Go · stdlib, không thư viện ngoài
 - Quy mô > 50.000 IP
@@ -91,8 +91,10 @@ Sau đó mở `artex-rules.json` và làm ba việc:
   -rules artex-rules.json \
   -ports 80,443,8787 \
   -c 800 \
-  -out ket-qua
+  -o output.txt
 ```
+
+Chế độ thường **bắt buộc** `-o <file>`: file nhận danh sách `IP:port` các host xác định là ARTEX. Dùng `-debug` để in toàn bộ thông tin quan sát được trên mỗi host (không cần `-o`). Thêm `-out <thư mục>` nếu muốn giữ bằng chứng đầy đủ (CSV/JSONL) và trạng thái resume.
 
 File `ips.txt` nhận lẫn lộn các dạng:
 
@@ -109,14 +111,15 @@ File `ips.txt` nhận lẫn lộn các dạng:
 
 ### Kết quả trong `ket-qua/`
 
-| File | Nội dung |
-|---|---|
-| `artex.txt` | **Deliverable chính** — `IP:port`, mỗi dòng một host xác định là ARTEX, đã sắp xếp và loại trùng |
-| `results.csv` | Toàn bộ bằng chứng mọi host có HTTP — mở Excel, lọc cột `verdict` |
-| `results.jsonl` | Mỗi host một dòng JSON, đẩy thẳng vào SIEM/SOAR |
-| `.scanned` | IP đã quét xong, phục vụ `-resume` |
+| Nơi | Nội dung | Khi nào có |
+|---|---|---|
+| File `-o` (vd `output.txt`) | **Deliverable chính** — `IP:port`, mỗi dòng một host xác định là ARTEX, đã sắp xếp và loại trùng | Chế độ thường |
+| `results.csv` (trong `-out`) | Toàn bộ bằng chứng mọi host có HTTP — mở Excel, lọc cột `verdict` | Khi có `-out` |
+| `results.jsonl` (trong `-out`) | Mỗi host một dòng JSON, đẩy thẳng vào SIEM/SOAR | Khi có `-out` |
+| `.scanned` (trong `-out`) | IP đã quét xong, phục vụ `-resume` | Khi có `-out` |
+| stdout | Toàn bộ thông tin quan sát được trên mỗi host có HTTP | Chế độ `-debug` |
 
-`artex.txt` được ghi và `fsync` ngay mỗi khi tìm thấy một host — mất điện giữa chừng vẫn còn kết quả.
+File `-o` được ghi và `fsync` ngay mỗi khi tìm thấy một host — mất điện giữa chừng vẫn còn kết quả.
 
 ## 05 · Chạy ở quy mô trên 50.000 IP
 
@@ -154,7 +157,7 @@ Mỗi rule khớp thì cộng `score`. Tổng điểm quyết định `verdict`:
 
 | Điều kiện | Verdict | Đi đâu |
 |---|---|---|
-| ≥ `min_score` | **artex** | `artex.txt` |
+| ≥ `min_score` | **artex** | file `-o` |
 | ≥ `suspect_from` | suspect | chỉ vào CSV, cần người xem |
 | còn lại | other | chỉ vào CSV |
 

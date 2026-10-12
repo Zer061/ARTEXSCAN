@@ -5,7 +5,8 @@
 //
 // Build:   go build -o artexscan .
 // Profile: ./artexscan -profile http://host:8787/login
-// Scan:    ./artexscan -targets ips.txt -rules artex-rules.json -out ./ket-qua
+// Scan:    ./artexscan -targets ips.txt -rules artex-rules.json -o output.txt
+// Debug:   ./artexscan -targets ips.txt -rules artex-rules.json -debug
 package main
 
 import (
@@ -39,6 +40,7 @@ import (
 type options struct {
 	targetsFile string
 	rulesFile   string
+	outFile     string
 	outDir      string
 	ports       string
 	concurrency int
@@ -51,6 +53,7 @@ type options struct {
 	resume      bool
 	noShuffle   bool
 	verbose     bool
+	debug       bool
 	profileURL  string
 }
 
@@ -644,10 +647,9 @@ type writers struct {
 	hitList []string
 }
 
-func newWriters(dir string, resume bool) (*writers, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
+// newWriters mo file ket qua chinh (outFile: moi dong mot IP:port ARTEX) va,
+// neu dir khong rong, mo them bo file bang chung day du trong dir.
+func newWriters(outFile, dir string, resume bool) (*writers, error) {
 	mode := os.O_CREATE | os.O_WRONLY
 	if resume {
 		mode |= os.O_APPEND
@@ -657,45 +659,53 @@ func newWriters(dir string, resume bool) (*writers, error) {
 
 	w := &writers{}
 	var err error
-	if w.hitsF, err = os.OpenFile(dir+"/artex.txt", mode, 0o644); err != nil {
-		return nil, err
-	}
-	if w.jsonF, err = os.OpenFile(dir+"/results.jsonl", mode, 0o644); err != nil {
-		return nil, err
-	}
-	newCSV := true
-	if resume {
-		if st, serr := os.Stat(dir + "/results.csv"); serr == nil && st.Size() > 0 {
-			newCSV = false
+	if outFile != "" {
+		if w.hitsF, err = os.OpenFile(outFile, mode, 0o644); err != nil {
+			return nil, err
 		}
-	}
-	if w.csvF, err = os.OpenFile(dir+"/results.csv", mode, 0o644); err != nil {
-		return nil, err
-	}
-	stateMode := os.O_CREATE | os.O_WRONLY | os.O_APPEND
-	if !resume {
-		stateMode = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
-	}
-	if w.stateF, err = os.OpenFile(dir+"/.scanned", stateMode, 0o644); err != nil {
-		return nil, err
-	}
-	if resume {
-		// Giu lai ket qua cua cac lan chay truoc, neu khong artex.txt se bi ghi de.
-		w.hitList = readLines(dir + "/artex.txt")
+		if resume {
+			// Giu lai ket qua cua cac lan chay truoc, neu khong file se bi ghi de.
+			w.hitList = readLines(outFile)
+		}
+		w.hits = bufio.NewWriter(w.hitsF)
 	}
 
-	w.hits = bufio.NewWriter(w.hitsF)
-	w.jsonl = bufio.NewWriter(w.jsonF)
-	w.csvW = csv.NewWriter(w.csvF)
-	w.state = bufio.NewWriter(w.stateF)
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+		if w.jsonF, err = os.OpenFile(dir+"/results.jsonl", mode, 0o644); err != nil {
+			return nil, err
+		}
+		newCSV := true
+		if resume {
+			if st, serr := os.Stat(dir + "/results.csv"); serr == nil && st.Size() > 0 {
+				newCSV = false
+			}
+		}
+		if w.csvF, err = os.OpenFile(dir+"/results.csv", mode, 0o644); err != nil {
+			return nil, err
+		}
+		stateMode := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+		if !resume {
+			stateMode = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		}
+		if w.stateF, err = os.OpenFile(dir+"/.scanned", stateMode, 0o644); err != nil {
+			return nil, err
+		}
 
-	if newCSV {
-		_ = w.csvW.Write([]string{
-			"ip", "port", "scheme", "path", "status", "verdict", "score",
-			"title", "server", "powered_by", "location", "cert_cn",
-			"favicon_mmh3", "body_len", "matched",
-		})
-		w.csvW.Flush()
+		w.jsonl = bufio.NewWriter(w.jsonF)
+		w.csvW = csv.NewWriter(w.csvF)
+		w.state = bufio.NewWriter(w.stateF)
+
+		if newCSV {
+			_ = w.csvW.Write([]string{
+				"ip", "port", "scheme", "path", "status", "verdict", "score",
+				"title", "server", "powered_by", "location", "cert_cn",
+				"favicon_mmh3", "body_len", "matched",
+			})
+			w.csvW.Flush()
+		}
 	}
 	return w, nil
 }
@@ -704,7 +714,7 @@ func (w *writers) record(p *probeResult) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if p.Verdict == "artex" {
+	if p.Verdict == "artex" && w.hits != nil {
 		line := p.hostPort()
 		w.hitList = append(w.hitList, line)
 		fmt.Fprintln(w.hits, line)
@@ -712,6 +722,9 @@ func (w *writers) record(p *probeResult) {
 		w.hitsF.Sync()
 	}
 
+	if w.csvW == nil {
+		return // khong ghi bang chung khi khong co -out
+	}
 	if b, err := json.Marshal(p); err == nil {
 		w.jsonl.Write(b)
 		w.jsonl.WriteByte('\n')
@@ -726,29 +739,47 @@ func (w *writers) record(p *probeResult) {
 
 func (w *writers) markDone(ip string) {
 	w.mu.Lock()
-	fmt.Fprintln(w.state, ip)
+	if w.state != nil {
+		fmt.Fprintln(w.state, ip)
+	}
 	w.mu.Unlock()
 }
 
 func (w *writers) flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.hits.Flush()
-	w.jsonl.Flush()
-	w.csvW.Flush()
-	w.state.Flush()
+	if w.hits != nil {
+		w.hits.Flush()
+	}
+	if w.jsonl != nil {
+		w.jsonl.Flush()
+	}
+	if w.csvW != nil {
+		w.csvW.Flush()
+	}
+	if w.state != nil {
+		w.state.Flush()
+	}
 }
 
 func (w *writers) close() {
 	w.flush()
-	w.hitsF.Close()
-	w.jsonF.Close()
-	w.csvF.Close()
-	w.stateF.Close()
+	if w.hitsF != nil {
+		w.hitsF.Close()
+	}
+	if w.jsonF != nil {
+		w.jsonF.Close()
+	}
+	if w.csvF != nil {
+		w.csvF.Close()
+	}
+	if w.stateF != nil {
+		w.stateF.Close()
+	}
 }
 
-// rewriteSorted ghi lai artex.txt da sap xep theo IP roi port.
-func (w *writers) rewriteSorted(dir string) error {
+// rewriteSorted ghi lai file ket qua da sap xep theo IP roi port.
+func (w *writers) rewriteSorted(outFile string) error {
 	w.mu.Lock()
 	list := append([]string(nil), w.hitList...)
 	w.mu.Unlock()
@@ -778,7 +809,7 @@ func (w *writers) rewriteSorted(dir string) error {
 	if len(clean) > 0 {
 		out = []byte(strings.Join(clean, "\n") + "\n")
 	}
-	return os.WriteFile(dir+"/artex.txt", out, 0o644)
+	return os.WriteFile(outFile, out, 0o644)
 }
 
 func readLines(path string) []string {
@@ -879,6 +910,13 @@ func scanIP(ctx context.Context, ip string, ports []int, o *options, rs *ruleSet
 			atomic.AddInt64(&c.httpOK, 1)
 		}
 
+		if o.debug && best.Status != 0 {
+			debugMu.Lock()
+			fmt.Printf("\n=========== %s  [%s]  score=%d ===========\n", best.hostPort(), best.Verdict, best.Score)
+			dumpObserved(os.Stdout, best)
+			debugMu.Unlock()
+		}
+
 		switch best.Verdict {
 		case "artex":
 			atomic.AddInt64(&c.hits, 1)
@@ -898,6 +936,44 @@ func scanIP(ctx context.Context, ip string, ports []int, o *options, rs *ruleSet
 }
 
 // ---------------------------------------------------------------- profile
+
+// debugMu giu cho cac khoi debug tu nhieu worker khong chen vao nhau.
+var debugMu sync.Mutex
+
+// dumpObserved in ra toan bo thong tin quan sat duoc tren mot host.
+// Dung chung cho che do -profile va -debug.
+func dumpObserved(out io.Writer, p *probeResult) {
+	fmt.Fprintf(out, "HTTP status    : %d\n", p.Status)
+	fmt.Fprintf(out, "Title          : %q\n", p.Title)
+	fmt.Fprintf(out, "Server         : %q\n", p.Server)
+	fmt.Fprintf(out, "X-Powered-By   : %q\n", p.PoweredBy)
+	fmt.Fprintf(out, "Location       : %q\n", p.Location)
+	fmt.Fprintf(out, "Cookie names   : %v\n", p.Cookies)
+	fmt.Fprintf(out, "Cert CN        : %q\n", p.CertCN)
+	fmt.Fprintf(out, "Cert SAN       : %v\n", p.CertSAN)
+	fmt.Fprintf(out, "Favicon mmh3   : %s\n", p.FaviconMMH3)
+	fmt.Fprintf(out, "Favicon sha256 : %s\n", p.FaviconSHA)
+	fmt.Fprintf(out, "Body length    : %d\n", p.BodyLen)
+	fmt.Fprintf(out, "Verdict / score: %s / %d\n", p.Verdict, p.Score)
+	if len(p.Matched) > 0 {
+		fmt.Fprintf(out, "Rule khop      : %s\n", strings.Join(p.Matched, ", "))
+	}
+
+	fmt.Fprintln(out, "\n----------- TAT CA RESPONSE HEADER -----------")
+	keys := make([]string, 0, len(p.headers))
+	for k := range p.headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(out, "%-28s %s\n", k+":", p.headers[k])
+	}
+
+	fmt.Fprintln(out, "\n----------- CHUOI DANG CHU Y TRONG BODY -----------")
+	for _, s := range interestingStrings(p.body) {
+		fmt.Fprintln(out, "  "+s)
+	}
+}
 
 func runProfile(o *options) error {
 	u, err := url.Parse(o.profileURL)
@@ -935,32 +1011,7 @@ func runProfile(o *options) error {
 
 	fmt.Println("=========== DAU HIEU QUAN SAT DUOC ===========")
 	fmt.Printf("URL            : %s\n", o.profileURL)
-	fmt.Printf("HTTP status    : %d\n", p.Status)
-	fmt.Printf("Title          : %q\n", p.Title)
-	fmt.Printf("Server         : %q\n", p.Server)
-	fmt.Printf("X-Powered-By   : %q\n", p.PoweredBy)
-	fmt.Printf("Location       : %q\n", p.Location)
-	fmt.Printf("Cookie names   : %v\n", p.Cookies)
-	fmt.Printf("Cert CN        : %q\n", p.CertCN)
-	fmt.Printf("Cert SAN       : %v\n", p.CertSAN)
-	fmt.Printf("Favicon mmh3   : %s\n", p.FaviconMMH3)
-	fmt.Printf("Favicon sha256 : %s\n", p.FaviconSHA)
-	fmt.Printf("Body length    : %d\n", p.BodyLen)
-
-	fmt.Println("\n----------- TAT CA RESPONSE HEADER -----------")
-	keys := make([]string, 0, len(p.headers))
-	for k := range p.headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		fmt.Printf("%-28s %s\n", k+":", p.headers[k])
-	}
-
-	fmt.Println("\n----------- CHUOI DANG CHU Y TRONG BODY -----------")
-	for _, s := range interestingStrings(p.body) {
-		fmt.Println("  " + s)
-	}
+	dumpObserved(os.Stdout, p)
 
 	fmt.Println("\n=========== GOI Y FILE RULES (soat lai truoc khi dung) ===========")
 	suggested := suggestRules(p)
@@ -1064,7 +1115,8 @@ func main() {
 	o := &options{}
 	flag.StringVar(&o.targetsFile, "targets", "", "file danh sach IP (IP / CIDR / dai / CSV)")
 	flag.StringVar(&o.rulesFile, "rules", "artex-rules.json", "file dau hieu nhan dang ARTEX")
-	flag.StringVar(&o.outDir, "out", "ket-qua", "thu muc ghi ket qua")
+	flag.StringVar(&o.outFile, "o", "", "file xuat ket qua: moi dong mot IP:port xac dinh dang chay ARTEX (bat buoc o che do thuong)")
+	flag.StringVar(&o.outDir, "out", "", "thu muc ghi bang chung day du (results.csv, results.jsonl, .scanned); de trong thi bo qua")
 	flag.StringVar(&o.ports, "ports", "80,443,8787", "danh sach port, cach nhau bang dau phay")
 	flag.IntVar(&o.concurrency, "c", 500, "so IP quet dong thoi")
 	flag.IntVar(&o.rate, "rate", 0, "gioi han ket noi moi giay (0 = khong gioi han)")
@@ -1076,6 +1128,7 @@ func main() {
 	flag.BoolVar(&o.resume, "resume", false, "bo qua cac IP da quet trong lan chay truoc")
 	flag.BoolVar(&o.noShuffle, "no-shuffle", false, "giu nguyen thu tu IP (mac dinh xao tron de trai deu tai)")
 	flag.BoolVar(&o.verbose, "v", false, "in ket qua khop ngay khi tim thay")
+	flag.BoolVar(&o.debug, "debug", false, "in ra het thong tin quan sat duoc tren moi host co HTTP (header, cookie, cert, favicon, body...)")
 	flag.StringVar(&o.profileURL, "profile", "", "lay dau hieu tu mot URL ARTEX da biet roi sinh file rules")
 	flag.Parse()
 
@@ -1090,6 +1143,17 @@ func main() {
 	if o.targetsFile == "" {
 		fmt.Fprintln(os.Stderr, "thieu -targets. Dung -h de xem huong dan.")
 		os.Exit(2)
+	}
+
+	// Che do thuong bat buoc co file xuat. Che do -debug chi quan sat nen khong bat buoc.
+	if o.outFile == "" && !o.debug {
+		fmt.Fprintln(os.Stderr, "thieu -o <file>: can duong dan file de xuat danh sach IP:port dang chay ARTEX.")
+		fmt.Fprintln(os.Stderr, "  vi du: -o output.txt   (hoac dung -debug de chi in thong tin quan sat, khong ghi file)")
+		os.Exit(2)
+	}
+	if o.resume && o.outDir == "" {
+		fmt.Fprintln(os.Stderr, "canh bao: -resume can -out <thu muc> de doc trang thai .scanned; bo qua resume.")
+		o.resume = false
 	}
 
 	rs, err := loadRules(o.rulesFile)
@@ -1144,7 +1208,7 @@ func main() {
 		rand.Shuffle(len(ips), func(i, j int) { ips[i], ips[j] = ips[j], ips[i] })
 	}
 
-	w, err := newWriters(o.outDir, o.resume)
+	w, err := newWriters(o.outFile, o.outDir, o.resume)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "loi tao file ket qua:", err)
 		os.Exit(1)
@@ -1205,16 +1269,26 @@ func main() {
 	wg.Wait()
 	close(stop)
 
-	// Dong file truoc roi moi ghi de artex.txt ban da sap xep.
+	// Dong file truoc roi moi ghi de file ket qua ban da sap xep.
 	w.close()
-	if err := w.rewriteSorted(o.outDir); err != nil {
-		fmt.Fprintln(os.Stderr, "canh bao: khong sap xep duoc artex.txt:", err)
+	if o.outFile != "" {
+		if err := w.rewriteSorted(o.outFile); err != nil {
+			fmt.Fprintln(os.Stderr, "canh bao: khong sap xep duoc file ket qua:", err)
+		}
 	}
 
 	fmt.Printf("\nXong sau %s\n", time.Since(start).Truncate(time.Second))
 	fmt.Printf("  IP da quet   : %d\n", atomic.LoadInt64(&c.ipsDone))
 	fmt.Printf("  Port mo      : %d\n", atomic.LoadInt64(&c.openPort))
 	fmt.Printf("  Co HTTP(S)   : %d\n", atomic.LoadInt64(&c.httpOK))
-	fmt.Printf("  ARTEX        : %d  -> %s/artex.txt\n", atomic.LoadInt64(&c.hits), o.outDir)
-	fmt.Printf("  Nghi ngo     : %d  -> loc verdict=suspect trong %s/results.csv\n", atomic.LoadInt64(&c.suspect), o.outDir)
+	if o.outFile != "" {
+		fmt.Printf("  ARTEX        : %d  -> %s\n", atomic.LoadInt64(&c.hits), o.outFile)
+	} else {
+		fmt.Printf("  ARTEX        : %d\n", atomic.LoadInt64(&c.hits))
+	}
+	if o.outDir != "" {
+		fmt.Printf("  Nghi ngo     : %d  -> loc verdict=suspect trong %s/results.csv\n", atomic.LoadInt64(&c.suspect), o.outDir)
+	} else {
+		fmt.Printf("  Nghi ngo     : %d  (dung -out <thu muc> de ghi bang chung day du)\n", atomic.LoadInt64(&c.suspect))
+	}
 }
