@@ -1,0 +1,23 @@
+# artexscan - file danh sach muc tieu
+#
+# Chap nhan lan lon cac dang duoi day, moi dong mot muc.
+# Dong trong va dong bat dau bang # bi bo qua.
+# Trung lap duoc loai tu dong.
+
+# --- IP don ---
+10.20.30.40
+10.20.30.41
+
+# --- CIDR ---
+# Mac dinh chan CIDR lon hon /16 de tranh lo tay quet nham ca /8.
+# Them co -allow-large neu that su can.
+10.21.0.0/24
+172.16.5.0/22
+
+# --- Dai IP ---
+10.22.1.1-10.22.1.250
+
+# --- Dong CSV: chi lay cot dau tien ---
+# Tien khi xuat tu CMDB/IPAM ra ma khong muon cat cot.
+10.23.4.7,web-fe-01,Khoi Ha tang
+10.23.4.8,web-fe-02,Khoi Ha tang

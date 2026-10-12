@@ -8,3 +8,6 @@ ket-qua/
 
 # OS
 .DS_Store
+
+# temp probe artifact
+.probe
