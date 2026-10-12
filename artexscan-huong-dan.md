@@ -145,7 +145,7 @@ File `ips.txt` nhận lẫn lộn các dạng:
 > **⚠️ Ba điều phải nói thẳng**
 >
 > 1. **Code chưa được biên dịch thử.** Shell trong phiên làm việc này bị chặn nên em không chạy được `go build`. Anh build lần đầu, nếu có lỗi cú pháp thì gửi em output, em sửa ngay.
-> 2. **Em chưa xem được trang `http://47.129.49.162:8787/login`.** WebFetch trả về `ROBOTS_DISALLOWED` và trình duyệt cũng bị chặn trong phiên này. Vì vậy bộ rule hiện tại **chưa phải dấu hiệu thật của ARTEX**. Bắt buộc chạy `-profile` trước. Em không đoán hash favicon hay tên cookie — đoán sai thì tool chạy sạch mà không ra kết quả nào, còn tệ hơn là báo lỗi.
+> 2. **Em chưa xem được trang `http://47.120.40.162:8787/login`.** WebFetch trả về `ROBOTS_DISALLOWED` và trình duyệt cũng bị chặn trong phiên này. Vì vậy bộ rule hiện tại **chưa phải dấu hiệu thật của ARTEX**. Bắt buộc chạy `-profile` trước. Em không đoán hash favicon hay tên cookie — đoán sai thì tool chạy sạch mà không ra kết quả nào, còn tệ hơn là báo lỗi.
 > 3. **Luôn kiểm chứng mẫu.** Sau lần quét đầu, mở `results.csv`, lọc `verdict=suspect` và kiểm tay 5–10 host. Có host ARTEX thật bị xếp vào `suspect` thì hạ `min_score`; có host lạ lọt vào `artex` thì rule đang quá rộng.
 
 ## 08 · Cách tính điểm
