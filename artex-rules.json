@@ -1,6 +1,6 @@
 {
   "_note_1": "File dau hieu khoi tao. CAC RULE DUOI DAY MOI CHI DUA TREN TEN 'ARTEX' - chua doi chieu voi trang that.",
-  "_note_2": "Buoc bat buoc truoc khi quet dien rong: chay  ./artexscan -profile http://47.129.49.162:8787/login  roi thay the phan 'rules' bang ket qua no in ra.",
+  "_note_2": "Buoc bat buoc truoc khi quet dien rong: chay  ./artexscan -profile http://47.120.40.162:8787/login  roi thay the phan 'rules' bang ket qua no in ra.",
   "_note_3": "Cac truong dung duoc: title | body | server | powered_by | location | status | cookie | cert_cn | cert_san | favicon_mmh3 | favicon_sha256 | url | header:<ten-header>",
   "_note_4": "match: contains (mac dinh) | equals | prefix | regex. case_sensitive mac dinh false.",
 
